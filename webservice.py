@@ -43,23 +43,87 @@ camera.resolution = (1024, 768)
 #sleep(2)
 phototaken = False
 tourId = "Tour2"
+
+####################
+#
+#
+#       Value to send
+#
+#       0 - Rien a faire
+#       1 - Avance
+#       2 - Recule
+#       3 - Tourne a gauche
+#       4 - Tourne a droite
+#       5 - Manual control
+#       6 - Start new path
+#       7 - stop
+#
+#
+#
+#       Value received
+#
+#       0 - Rien a faire (stop)
+#       1 - Prend Photo
+#       2 - J'ai terminer un tour
+#       3 - j'avance
+#       4 - je recule
+#       5 - Je tourne a droite
+#       6 - je tourne a gauche
+#       7 - 
+#
+#
+#
+
 def control_robot(data,user, tourId):
 
         if data['Avance'] == 1:
-                GPIO.output(14, GPIO.HIGH)
-        else:
-                GPIO.output(14, GPIO.LOW)
-
+                set_output(1)
+                print("Je le fait avancer")
         if data['Recule'] == 1:
-                GPIO.output(15, GPIO.HIGH)
-        else:
-                GPIO.output(15, GPIO.LOW) 
-
+                set_output(2)
+                print("Je le fait reculer")
+        if data['Droite'] == 1:
+                set_output(3)
+                print("Je le fait droite")
+        if data['Gauche'] == 1:
+                set_output(4)
+        if data['Manual'] == 1:
+                set_output(5)
+                db.child("RobotControl").update({"Manual":0},user['idToken'])
+        if data['NewPath'] == 1:
+                set_output(6)
+                db.child("RobotControl").update({"NewPath":0},user['idToken'])
+        if data['Stop'] == 1:
+                print("Je le fait reculer")
+                set_output(7)
+                db.child("RobotControl").update({"Stop":0},user['idToken'])
+        if data['Avance'] == 0 and data['Recule'] == 0 and data['Droite'] == 0 and data['Gauche'] == 0 :
+                print("Je me stop car aucun commande")
+                set_output(7)
         if data['Photo'] == 1:
                 pictureName = time.strftime("%Y%m%d%H%M%S")
                 camera.capture('images/' +pictureName+ '.jpg')
                 storage.child('images/' +tourId+'/' +pictureName+ '.jpg').put('images/'+pictureName+ '.jpg',user['idToken'])
-                db.child("RobotControl").update({"Photo":"0"},user['idToken'])
+                db.child("RobotControl").update({"Photo":0},user['idToken'])
+
+
+def action_from_input( nb_received):
+        
+        if nb_received == 0:
+                print("Rien a faire")
+        elif nb_received == 1 :
+                take_photo_from_raspbery(tourId)
+        elif nb_received == 2 :
+                print("Le tour est terminer")
+        elif nb_received == 3 :
+                print("Le robot avance")
+        elif nb_received == 4 :
+                print("Le robot recule")
+        elif nb_received == 5 :
+                print("Le robot tourne a droite")
+        elif nb_received == 6 :
+                print("Le robot tourne a gauche")
+
 
 
 def take_photo_from_raspbery(tourId):
@@ -75,52 +139,31 @@ def set_output( nb ):
         GPIO.output(15, GPIO.LOW)
         GPIO.output(18, GPIO.LOW)
         
-        if nb > 7:
+        if nb > 7 or nb < 1:
                 return
 
         
-        if(nb % 2 == 0):
-                GPIO.output(14, GPIO.LOW)
-                print( " 14 0" + str(nb) )
-        else:
+        if(nb % 2 == 1):
                 GPIO.output(14, GPIO.HIGH)
-                print( " 14 1" + str(nb) )
 
                         
         nb = int(nb/2)
-
         if nb < 1:
                 return
         
-        if(nb % 2 == 0):
-                GPIO.output(15, GPIO.LOW)
-                print( " 15 0" + str(nb))
-
-        else:
+        if(nb % 2 == 1):
                 GPIO.output(15, GPIO.HIGH)
-                print( " 15 1" + str(nb) ) 
                         
         nb = int(nb/2)
-
-
         if nb < 1:
                 return
         
-        if(nb % 2 == 0):
-                GPIO.output(18, GPIO.LOW)
-                print( " 18 0" + str(nb) )
-        else:
-                GPIO.output(18, GPIO.HIGH)
-                print( " 18 1" + str(nb))
-                        
+        if(nb % 2 == 1):
+                GPIO.output(18, GPIO.HIGH)                        
        
 def get_input():
-
-        print( str(GPIO.input(17)) + '-'  + str(GPIO.input(22))+ '-'   + str(GPIO.input(27)) )
-
         
         nb = 0
-        
         nb = nb + ( 2**0) * GPIO.input(17)
         nb = nb + ( 2**1) * GPIO.input(22)
         nb = nb + ( 2**2) * GPIO.input(27)
@@ -130,10 +173,13 @@ def get_input():
          
 
 nbToSend = 1
-
+set_output(0)
 while 1:
         data = db.child("RobotControl").get(user['idToken'])
         control_robot(data.val(),user, tourId)
+        nb_receive = get_input()
+        action_from_input(nb_receive)
+        
         #print(GPIO.input(3))
         #if GPIO.input(3) == True and phototaken == False:
         #        print ("Je recoint un IN")
@@ -148,8 +194,8 @@ while 1:
         #time.sleep(2)
         #nbToSend = nbToSend + 1
 
-        nb_receive = get_input()
-        print( "Nombre recue " + str(nb_receive) )
+        
+        
         
                 
                 
