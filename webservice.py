@@ -87,18 +87,21 @@ def control_robot(data,user, tourId):
                 print("Je le fait droite")
         if data['Gauche'] == 1:
                 set_output(4)
-        if data['Manual'] == 1:
+                print("Je le fait gauche")
+        if data['Manuel'] == 1:
                 set_output(5)
-                db.child("RobotControl").update({"Manual":0},user['idToken'])
+                print("MANUEL")
+                db.child("RobotControl").update({"Manuel":0},user['idToken'])
         if data['NewPath'] == 1:
                 set_output(6)
+                print("AUTOMATIC")
                 db.child("RobotControl").update({"NewPath":0},user['idToken'])
         if data['Stop'] == 1:
                 print("Je le fait reculer")
                 set_output(7)
                 db.child("RobotControl").update({"Stop":0},user['idToken'])
         if data['Avance'] == 0 and data['Recule'] == 0 and data['Droite'] == 0 and data['Gauche'] == 0 :
-                print("Je me stop car aucun commande")
+              #  print("Je me stop car aucun commande")
                 set_output(7)
         if data['Photo'] == 1:
                 pictureName = time.strftime("%Y%m%d%H%M%S")
