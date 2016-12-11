@@ -42,7 +42,37 @@ camera.resolution = (1024, 768)
 # Camera warm-up time
 #sleep(2)
 phototaken = False
-tourId = "Tour2"
+tourId = time.strftime("%Y%m%d%H%M%S")
+
+
+#   Configuration capteur
+
+# Use BCM GPIO references
+# instead of physical pin numbers
+GPIO.setmode(GPIO.BCM)
+
+# Define GPIO to use on Pi
+GPIO_TRIGGER = 23
+GPIO_ECHO    = 24
+
+# Speed of sound in cm/s at temperature
+temperature = 20
+speedSound = 33100 + (0.6*temperature)
+
+# Set pins as output and input
+GPIO.setup(GPIO_TRIGGER,GPIO.OUT)  # Trigger
+GPIO.setup(GPIO_ECHO,GPIO.IN)      # Echo
+
+# Set trigger to False (Low)
+GPIO.output(GPIO_TRIGGER, False)
+
+#  Allow module to settle
+time.sleep(0.5)
+
+
+
+
+
 
 ####################
 #
@@ -74,6 +104,14 @@ tourId = "Tour2"
 #
 #
 
+def creat_new_tour():
+    global tourId
+    tourId= time.strftime("%Y%m%d%H%M%S")
+    db.child("ListeTour").child(tourId).set(   {"Etat": 0 }  ,user['idToken'])
+    print("Creation nouveau tour")
+
+
+
 def control_robot(data,user, tourId):
 
         if data['Avance'] == 1:
@@ -96,18 +134,21 @@ def control_robot(data,user, tourId):
                 set_output(6)
                 print("AUTOMATIC")
                 db.child("RobotControl").update({"NewPath":0},user['idToken'])
+                tourId = time.strftime("%Y%m%d%H%M%S")
+                creat_new_tour()
         if data['Stop'] == 1:
-                print("Je le fait reculer")
+                print("Je le fait stop")
                 set_output(7)
                 db.child("RobotControl").update({"Stop":0},user['idToken'])
         if data['Avance'] == 0 and data['Recule'] == 0 and data['Droite'] == 0 and data['Gauche'] == 0 :
               #  print("Je me stop car aucun commande")
                 set_output(7)
         if data['Photo'] == 1:
-                pictureName = time.strftime("%Y%m%d%H%M%S")
-                camera.capture('images/' +pictureName+ '.jpg')
-                storage.child('images/' +tourId+'/' +pictureName+ '.jpg').put('images/'+pictureName+ '.jpg',user['idToken'])
-                db.child("RobotControl").update({"Photo":0},user['idToken'])
+                #pictureName = time.strftime("%Y%m%d%H%M%S")
+                #camera.capture('images/' +pictureName+ '.jpg')
+                #storage.child('images/' +tourId+'/' +pictureName+ '.jpg').put('images/'+pictureName+ '.jpg',user['idToken'])
+                #db.child("RobotControl").update({"Photo":0},user['idToken'])
+                take_photo_from_raspbery(tourId)
 
 
 def action_from_input( nb_received):
@@ -115,7 +156,7 @@ def action_from_input( nb_received):
         if nb_received == 0:
                 print("Rien a faire")
         elif nb_received == 1 :
-                take_photo_from_raspbery(tourId)
+                take_photo_from_raspbery()
         elif nb_received == 2 :
                 print("Le tour est terminer")
         elif nb_received == 3 :
@@ -129,11 +170,13 @@ def action_from_input( nb_received):
 
 
 
-def take_photo_from_raspbery(tourId):
+def take_photo_from_raspbery():
         pictureName = time.strftime("%Y%m%d%H%M%S")
+        global tourId
         camera.capture('images/' +pictureName+ '.jpg')
         storage.child('images/'+tourId+'/' +pictureName+ '.jpg').put('images/' +pictureName+ '.jpg',user['idToken'])
         db.child("RobotControl").update({"Photo":"0"},user['idToken'])
+        db.child("ListeTour").child(tourId).child("ListePhoto").push({"Name":pictureName},user['idToken'])
         print("La photo a été prise")
 
 def set_output( nb ):
@@ -177,16 +220,69 @@ def get_input():
 
 nbToSend = 1
 set_output(0)
+ToStop = False
+photoToTake = True
 while 1:
-        data = db.child("RobotControl").get(user['idToken'])
-        control_robot(data.val(),user, tourId)
+        time.sleep(0.2)
+
+        if ToStop == False:
+            data = db.child("RobotControl").get(user['idToken'])
+            control_robot(data.val(),user, tourId)
+        
         nb_receive = get_input()
         action_from_input(nb_receive)
+
+        # Send 10us pulse to trigger
+        GPIO.output(GPIO_TRIGGER, True)
+        # Wait 10us
+        time.sleep(0.00001)
+        GPIO.output(GPIO_TRIGGER, False)
+
+        start = time.time()
+
+        while GPIO.input(GPIO_ECHO)==0:
+            start = time.time()
+
+        while GPIO.input(GPIO_ECHO)==1:
+            stop = time.time()
+
+        # Calculate pulse length
+        elapsed = stop-start
+
+        # Distance pulse travelled in that time is time
+        # multiplied by the speed of sound (cm/s)
+        distance = elapsed * speedSound
+
+        # That was the distance there and back so halve the value
+        distance = distance / 2
+        
+        print("Distance : {0:5.2f}".format(distance))
+        if distance < 6:
+            set_output(7)
+            ToStop = True
+            if photoToTake == True:
+                print("Prend une photo")
+                photoToTake = False
+                take_photo_from_raspbery()            
+        elif distance > 8:
+            photoToTake = True
+            ToStop = False
+        
+            
+            
+            
+        
+            
+            
+            
+            
+            
+
         
         #print(GPIO.input(3))
         #if GPIO.input(3) == True and phototaken == False:
         #        print ("Je recoint un IN")
-        #        take_photo_from_raspbery(tourId)
+        #        take_photo_from_raspbery()
         #        phototaken = True
         #if GPIO.input(3) == False:
         #        phototaken = False;
