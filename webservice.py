@@ -2,6 +2,7 @@ import pyrebase
 import RPi.GPIO as GPIO
 from picamera import PiCamera
 import time
+#import PyFCM as FCMNotification
 
 #Configuration Firebase
 config = {
@@ -18,6 +19,15 @@ user = auth.sign_in_with_email_and_password("ro@ro.com", "azerty")
 db = firebase.database()
 storage = firebase.storage()
 print ("database OKAY")
+
+
+#Configuration Notification Push
+
+#push_service = FCMNotification(api_key = "AIzaSyDVft5fm1neJ27jwQmPDhFiE-ewjKB9DNs")
+
+#registration_id = "eZ3XCEG8q3Q:APA91bFmtVF_kSyz5qbaYjNJ4qMq0FaTRb3LX3gwh3yDtkZslbS2F3MN28c4d2zW-zKStO7pdI26lLcUusZTLbwNLXzLUb5JP1UVg2W_xIy1-c6EjwZ9_neHt2pDh9TSBEWfOQnZ49op"
+#message_title = "Pololu"
+#message_body = "Envoie d'un message via notification push By Owaa"
 
 #Configuration GPIO
 GPIO.setmode(GPIO.BCM)
@@ -70,7 +80,7 @@ GPIO.output(GPIO_TRIGGER, False)
 time.sleep(0.5)
 
 
-
+listeMouv = []
 
 
 
@@ -148,35 +158,50 @@ def control_robot(data,user, tourId):
                 #camera.capture('images/' +pictureName+ '.jpg')
                 #storage.child('images/' +tourId+'/' +pictureName+ '.jpg').put('images/'+pictureName+ '.jpg',user['idToken'])
                 #db.child("RobotControl").update({"Photo":0},user['idToken'])
-                take_photo_from_raspbery(tourId)
+                take_photo_from_raspbery()
 
 
 def action_from_input( nb_received):
         
         if nb_received == 0:
-                print("Rien a faire")
+                db.update({"RobotDoMove":1},user['idToken'])
+                listeMouv.append(1)
         elif nb_received == 1 :
                 take_photo_from_raspbery()
         elif nb_received == 2 :
                 print("Le tour est terminer")
+                listeMouv.append(1)
+                db.child("RobotHistoMov").push({"Path":listeMouv},user['idToken'])
         elif nb_received == 3 :
                 print("Le robot avance")
+                db.update({"RobotDoMove":2},user['idToken'])
+                listeMouv.append(2)
         elif nb_received == 4 :
                 print("Le robot recule")
+                db.update({"RobotDoMove":3},user['idToken'])
+                listeMouv.append(3)
         elif nb_received == 5 :
                 print("Le robot tourne a droite")
+                db.update({"RobotDoMove":4},user['idToken'])
+                listeMouv.append(4)
         elif nb_received == 6 :
                 print("Le robot tourne a gauche")
+                db.update({"RobotDoMove":5},user['idToken'])
+                listeMouv.append(5)
 
 
 
 def take_photo_from_raspbery():
         pictureName = time.strftime("%Y%m%d%H%M%S")
+        #result = push_service.notify_single_device(registration_id=registration_id, message_title=message_title, message_body=message_body)
+
         global tourId
         camera.capture('images/' +pictureName+ '.jpg')
         storage.child('images/'+tourId+'/' +pictureName+ '.jpg').put('images/' +pictureName+ '.jpg',user['idToken'])
         db.child("RobotControl").update({"Photo":"0"},user['idToken'])
         db.child("ListeTour").child(tourId).child("ListePhoto").push({"Name":pictureName},user['idToken'])
+        db.child("ListeTour").child(tourId).update({"Etat":1},user['idToken'])
+
         print("La photo a été prise")
 
 def set_output( nb ):
@@ -256,7 +281,7 @@ while 1:
         # That was the distance there and back so halve the value
         distance = distance / 2
         
-        print("Distance : {0:5.2f}".format(distance))
+        #print("Distance : {0:5.2f}".format(distance))
         if distance < 6:
             set_output(7)
             ToStop = True
@@ -269,7 +294,7 @@ while 1:
             ToStop = False
         
             
-            
+        
             
         
             
