@@ -36,7 +36,7 @@ GPIO.setwarnings(False)
 
 GPIO.setup(14, GPIO.OUT, initial=GPIO.LOW)
 GPIO.setup(15, GPIO.OUT, initial=GPIO.LOW)
-GPIO.setup(18, GPIO.OUT, initial=GPIO.LOW)
+GPIO.setup(2, GPIO.OUT, initial=GPIO.LOW)
 
 GPIO.setup( 17, GPIO.IN , pull_up_down=GPIO.PUD_UP)
 GPIO.setup( 22, GPIO.IN , pull_up_down=GPIO.PUD_UP)
@@ -80,7 +80,8 @@ GPIO.output(GPIO_TRIGGER, False)
 time.sleep(0.5)
 
 
-listeMouv = []
+listeMouv = ""
+manuelMode = True
 
 
 
@@ -124,6 +125,8 @@ def creat_new_tour():
 
 def control_robot(data,user, tourId):
 
+        global manuelMode
+        global listeMouv
         if data['Avance'] == 1:
                 set_output(1)
                 print("Je le fait avancer")
@@ -139,16 +142,22 @@ def control_robot(data,user, tourId):
         if data['Manuel'] == 1:
                 set_output(5)
                 print("MANUEL")
+                manuelMode = True
                 db.child("RobotControl").update({"Manuel":0},user['idToken'])
+                print("Je push le HistoMouv")
+                db.child("RobotHistoMov").child(tourId).set(   {"Path": listeMouv }  ,user['idToken'])
+                listeMouv = ""
+                    
         if data['NewPath'] == 1:
                 set_output(6)
                 print("AUTOMATIC")
+                manuelMode = False
                 db.child("RobotControl").update({"NewPath":0},user['idToken'])
                 tourId = time.strftime("%Y%m%d%H%M%S")
                 creat_new_tour()
         if data['Stop'] == 1:
                 print("Je le fait stop")
-                set_output(7)
+                set_output(0)
                 db.child("RobotControl").update({"Stop":0},user['idToken'])
         if data['Avance'] == 0 and data['Recule'] == 0 and data['Droite'] == 0 and data['Gauche'] == 0 :
               #  print("Je me stop car aucun commande")
@@ -159,35 +168,37 @@ def control_robot(data,user, tourId):
                 #storage.child('images/' +tourId+'/' +pictureName+ '.jpg').put('images/'+pictureName+ '.jpg',user['idToken'])
                 #db.child("RobotControl").update({"Photo":0},user['idToken'])
                 take_photo_from_raspbery()
+                print("Prend photo")
 
 
 def action_from_input( nb_received):
-        
+        global listeMouv
         if nb_received == 0:
                 db.update({"RobotDoMove":1},user['idToken'])
-                listeMouv.append(1)
+                listeMouv = listeMouv + "1"
         elif nb_received == 1 :
-                take_photo_from_raspbery()
+                #take_photo_from_raspbery()
+                print("Prend photo")
         elif nb_received == 2 :
                 print("Le tour est terminer")
-                listeMouv.append(1)
+                
                 db.child("RobotHistoMov").push({"Path":listeMouv},user['idToken'])
         elif nb_received == 3 :
                 print("Le robot avance")
                 db.update({"RobotDoMove":2},user['idToken'])
-                listeMouv.append(2)
+                listeMouv = listeMouv + "2"
         elif nb_received == 4 :
                 print("Le robot recule")
                 db.update({"RobotDoMove":3},user['idToken'])
-                listeMouv.append(3)
+                listeMouv = listeMouv + "3"
         elif nb_received == 5 :
                 print("Le robot tourne a droite")
                 db.update({"RobotDoMove":4},user['idToken'])
-                listeMouv.append(4)
+                listeMouv = listeMouv + "4"
         elif nb_received == 6 :
                 print("Le robot tourne a gauche")
                 db.update({"RobotDoMove":5},user['idToken'])
-                listeMouv.append(5)
+                listeMouv = listeMouv + "5"
 
 
 
@@ -208,7 +219,7 @@ def set_output( nb ):
 
         GPIO.output(14, GPIO.LOW)
         GPIO.output(15, GPIO.LOW)
-        GPIO.output(18, GPIO.LOW)
+        GPIO.output(2, GPIO.LOW)
         
         if nb > 7 or nb < 1:
                 return
@@ -230,7 +241,7 @@ def set_output( nb ):
                 return
         
         if(nb % 2 == 1):
-                GPIO.output(18, GPIO.HIGH)                        
+                GPIO.output(2, GPIO.HIGH)                        
        
 def get_input():
         
@@ -248,78 +259,50 @@ set_output(0)
 ToStop = False
 photoToTake = True
 while 1:
-        time.sleep(0.2)
-
-        if ToStop == False:
-            data = db.child("RobotControl").get(user['idToken'])
-            control_robot(data.val(),user, tourId)
-        
+    time.sleep(0.2)
+    if ToStop == False:
+        data = db.child("RobotControl").get(user['idToken'])
+        control_robot(data.val(),user, tourId)
+            
+            
+    if manuelMode == False:
         nb_receive = get_input()
         action_from_input(nb_receive)
 
-        # Send 10us pulse to trigger
-        GPIO.output(GPIO_TRIGGER, True)
-        # Wait 10us
-        time.sleep(0.00001)
-        GPIO.output(GPIO_TRIGGER, False)
+     # Send 10us pulse to trigger
+    GPIO.output(GPIO_TRIGGER, True)
+    # Wait 10us
+    time.sleep(0.00001)
+    GPIO.output(GPIO_TRIGGER, False)
 
+    start = time.time()
+
+    while GPIO.input(GPIO_ECHO)==0:
         start = time.time()
 
-        while GPIO.input(GPIO_ECHO)==0:
-            start = time.time()
+    while GPIO.input(GPIO_ECHO)==1:
+        stop = time.time()
 
-        while GPIO.input(GPIO_ECHO)==1:
-            stop = time.time()
+    # Calculate pulse length
+    elapsed = stop-start
 
-        # Calculate pulse length
-        elapsed = stop-start
+    # Distance pulse travelled in that time is time
+    # multiplied by the speed of sound (cm/s)
+    distance = elapsed * speedSound
 
-        # Distance pulse travelled in that time is time
-        # multiplied by the speed of sound (cm/s)
-        distance = elapsed * speedSound
-
-        # That was the distance there and back so halve the value
-        distance = distance / 2
+    # That was the distance there and back so halve the value
+    distance = distance / 2
         
-        #print("Distance : {0:5.2f}".format(distance))
-        if distance < 6:
-            set_output(7)
-            ToStop = True
-            if photoToTake == True:
-                print("Prend une photo")
-                photoToTake = False
-                take_photo_from_raspbery()            
-        elif distance > 8:
-            photoToTake = True
-            ToStop = False
-        
+    #print("Distance : {0:5.2f}".format(distance))
+    if distance < 6:
+        set_output(5)
+        ToStop = True
+        manuelMode = True
+        if photoToTake == True:
+            print("Prend une photo")
+            photoToTake = False
+            take_photo_from_raspbery()
+    elif distance > 8:
+        photoToTake = True
+        ToStop = False
             
-        
-            
-        
-            
-            
-            
-            
-            
-
-        
-        #print(GPIO.input(3))
-        #if GPIO.input(3) == True and phototaken == False:
-        #        print ("Je recoint un IN")
-        #        take_photo_from_raspbery()
-        #        phototaken = True
-        #if GPIO.input(3) == False:
-        #        phototaken = False;
-
-        
-        #print( "Nouveau numero")
-        #set_output(nbToSend)
-        #time.sleep(2)
-        #nbToSend = nbToSend + 1
-
-        
-        
-        
-                
-                
